@@ -6,6 +6,26 @@
 
 Voila is a new family of large voice-language foundation models aiming to lift human-AI interaction experiences to the next level. Breaking away from the constraints of traditional voice AI systems—high latency, loss of vocal nuances, and mechanical responses—Voila employs an innovative end-to-end model design and a novel hierarchical Transformer architecture. This approach enables real-time, autonomous, and rich voice interactions, with latency as low as 195 ms, surpassing average human response times. Combining advanced voice and language modeling, Voila offers customizable, persona-driven engagements and excels in a range of audio tasks from ASR and TTS to speech translation across six languages. With the online [web demo](https://huggingface.co/spaces/maitrix-org/Voila-demo), Voila invites you to explore a transformative, natural dialogue experience between human and AI.
 
+# ⚠️⚠️ My Voila finetuning
+I want Voila to translate speech to text for Covost2 Chinese to English task. For this reason, I have changed the file [model.py](./model.py) in order to finetune it using the class **VoilaModel**. Moreover, I finetuned Voila base and chat version for comparing both results with BLEU and COMET. You can see how I achieved that in [L4.7_ST_Voila_Base_Finetuned_Covost2.ipynb](./L4.7_ST_Voila_Base_Finetuned_Covost2.ipynb) and [L4.8_ST_Voila_Chat_Finetuned_Covost2.ipynb](./L4.8_ST_Voila_Chat_Finetuned_Covost2.ipynb).
+I used that requirements:
+```python
+torch==2.5.0
+torchvision==0.20
+torchaudio==2.5.0
+transformers==4.48.0
+bitsandbytes==0.49.0
+accelerate==1.12.0
+soundfile==0.13.1
+librosa==0.11.0
+peft==0.14.0
+whisper_normalizer==0.1.12
+datasets==3.6.0
+sacrebleu==2.5.1
+unbabel-comet==2.2.7
+```
+
+
 # ✨ Highlights
 - ⭐ High-fidelity, low-latency, real-time streaming audio processing
 - ⭐ Effective integration of voice and language modeling capabilities
