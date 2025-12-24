@@ -352,7 +352,7 @@ class VoilaModel(LlamaPreTrainedModel):
         if len(inputs_embeds.shape) == 4:
             inputs_embeds = inputs_embeds.mean(dim=2)
 
-        if self.training or \
+        if (self.training and ref_embs is not None) or \
                 (past_key_values is None and ref_embs is not None) or \
                 (past_key_values is not None and past_key_values.get_seq_length() < 4 and ref_embs is not None):
             ref_embs = self.ref_emb_linear(ref_embs.to(self.ref_emb_linear.weight.dtype))
@@ -376,13 +376,16 @@ class VoilaModel(LlamaPreTrainedModel):
         )
 
         hidden_states = outputs[0]
-        if self.config.pretraining_tp > 1:
-            lm_head_slices = self.lm_head.weight.split(self.vocab_size // self.config.pretraining_tp, dim=0)
-            logits = [F.linear(hidden_states, lm_head_slices[i]) for i in range(self.config.pretraining_tp)]
-            logits = torch.cat(logits, dim=-1)
+        if self.training:
+            logits = self.lm_head(hidden_states)
         else:
-            # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-            logits = self.lm_head(hidden_states[:, -num_logits_to_keep:, :])
+            if self.config.pretraining_tp > 1:
+                lm_head_slices = self.lm_head.weight.split(self.vocab_size // self.config.pretraining_tp, dim=0)
+                logits = [F.linear(hidden_states, lm_head_slices[i]) for i in range(self.config.pretraining_tp)]
+                logits = torch.cat(logits, dim=-1)
+            else:
+                # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+                logits = self.lm_head(hidden_states[:, -num_logits_to_keep:, :])
 
         loss = None
 
@@ -511,6 +514,7 @@ class VoilaModel(LlamaPreTrainedModel):
         top_k=50,
         audio_temperature=0.2,
         audio_top_k=50,
+        use_audio_transformer=True
     ):
         assert eos_token_id is not None and pad_token_id is not None, "eos_token_id and pad_token_id are required for inference"
         assert llm_audio_token_id is not None and min_audio_token_id is not None, "llm_audio_token_id and min_audio_token_id are required for inference"
@@ -550,18 +554,19 @@ class VoilaModel(LlamaPreTrainedModel):
                 **model_inputs,
                 return_dict=True,
             )
-            audio_tokens = self.audio_transformer.inference(
-                outputs.last_hidden_state,
-                temperature=audio_temperature,
-                top_k=audio_top_k,
-            )
-            audio_tokens = torch.stack(
-                [
-                    audio_tokens[:, :, ci] + min_audio_token_id + ci*self.config.codebook_size
-                    for ci in range(self.config.num_codebooks)
-                ],
-                dim=2,
-            )
+            if use_audio_transformer:
+                audio_tokens = self.audio_transformer.inference(
+                    outputs.last_hidden_state,
+                    temperature=audio_temperature,
+                    top_k=audio_top_k,
+                )
+                audio_tokens = torch.stack(
+                    [
+                        audio_tokens[:, :, ci] + min_audio_token_id + ci*self.config.codebook_size
+                        for ci in range(self.config.num_codebooks)
+                    ],
+                    dim=2,
+                )
 
             next_token_logits = outputs.logits[:, -1, :]
 
@@ -588,7 +593,9 @@ class VoilaModel(LlamaPreTrainedModel):
             # Append NUM_CODEBOOK text tokens or audio_tokens
             if len(next_tokens.shape) == 1:
                 next_tokens = next_tokens[:, None, None].expand(-1, 1, self.config.num_codebooks)
-            next_tokens = torch.where(next_tokens==llm_audio_token_id, audio_tokens, next_tokens)
+            
+            if use_audio_transformer:
+                next_tokens = torch.where(next_tokens==llm_audio_token_id, audio_tokens, next_tokens)
 
             input_ids = torch.cat([input_ids, next_tokens], dim=1)
             if streamer is not None:
@@ -701,7 +708,7 @@ class VoilaAudioAlphaModel(LlamaPreTrainedModel):
         if len(inputs_embeds.shape) == 4:
             inputs_embeds = inputs_embeds.mean(dim=2)
 
-        if self.training or \
+        if (self.training and ref_embs is not None) or \
                 (past_key_values is None and ref_embs is not None) or \
                 (past_key_values is not None and past_key_values.get_seq_length() < 4 and ref_embs is not None):
             ref_embs = self.ref_emb_linear(ref_embs.to(self.ref_emb_linear.weight.dtype))
